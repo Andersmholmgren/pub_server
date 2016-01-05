@@ -179,13 +179,20 @@ class PackagesResource {
     return _addUploader(package, body['email']);
   }
 
-  @Delete('uploaders')
-  removeUploader(String package, String user) {
+  @Delete('uploaders/{userEmail}')
+  removeUploader(String package, String userEmail) async {
     if (!repository.supportsUploaders) {
       return new Future.value(new shelf.Response.notFound(null));
     }
 
-    return removeUploader(package, user);
+    try {
+      await repository.removeUploader(package, userEmail);
+      return _successfullRequest('Successfully removed uploader from package.');
+    } on LastUploaderRemoveException {
+      return _badRequest('Cannot remove last uploader of a package.');
+    } on UnauthorizedAccessException {
+      return _unauthorizedRequest();
+    }
   }
 
   Future<shelf.Response> _addUploader(String package, String user) async {
@@ -199,18 +206,6 @@ class PackagesResource {
     }
 
     return _badRequest('Invalid request');
-  }
-
-  Future<shelf.Response> removeUploader(
-      String package, String userEmail) async {
-    try {
-      await repository.removeUploader(package, userEmail);
-      return _successfullRequest('Successfully removed uploader from package.');
-    } on LastUploaderRemoveException {
-      return _badRequest('Cannot remove last uploader of a package.');
-    } on UnauthorizedAccessException {
-      return _unauthorizedRequest();
-    }
   }
 }
 
