@@ -298,7 +298,7 @@ class ShelfPubServer {
       Map packageVersion2Json(PackageVersion version) {
         return {
           'archive_url': '${_downloadUrl(
-                  uri, version.package, version.versionString)}',
+                  uri, version.packageName, version.versionString)}',
           'pubspec': loadYaml(version.pubspecYaml),
           'version': version.versionString,
         };
@@ -337,7 +337,7 @@ class ShelfPubServer {
       // TODO: Add legacy entries (if necessary), such as version_url.
       return _jsonResponse({
         'archive_url': '${_downloadUrl(
-                    uri, version.package, version.versionString)}',
+                    uri, version.packageName, version.versionString)}',
         'pubspec': loadYaml(version.pubspecYaml),
         'version': version.versionString,
       });
@@ -371,8 +371,8 @@ class ShelfPubServer {
   Future<shelf.Response> _finishUploadAsync(Uri uri) {
     return repository.finishAsyncUpload(uri).then((PackageVersion vers) async {
       if (cache != null) {
-        _logger.info('Invalidating cache for package ${vers.package}.');
-        await cache.invalidatePackageData(vers.package);
+        _logger.info('Invalidating cache for package ${vers.packageName}.');
+        await cache.invalidatePackageData(vers.packageName);
       }
       return _jsonResponse({
         'success': {'message': 'Successfully uploaded package.',},
@@ -422,9 +422,9 @@ class ShelfPubServer {
           // `form-data; name="file"; filename="package.tar.gz`
           repository.upload(part).then((PackageVersion version) async {
             if (cache != null) {
-              _logger
-                  .info('Invalidating cache for package ${version.package}.');
-              await cache.invalidatePackageData(version.package);
+              _logger.info(
+                  'Invalidating cache for package ${version.packageName}.');
+              await cache.invalidatePackageData(version.packageName);
             }
             _logger.info('Redirecting to found url.');
             return new shelf.Response.found(_finishUploadSimpleUrl(uri));
