@@ -11,6 +11,8 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:pub_server/repository.dart';
 import 'package:pub_server/shelf_pubserver.dart';
 import 'package:test/test.dart';
+import 'package:pub_server/mojito_pubserver.dart';
+import 'package:shelf_rest/shelf_rest.dart';
 
 class RepositoryMock implements PackageRepository {
   final Function downloadFun;
@@ -155,11 +157,12 @@ main() {
   group('shelf_pubserver', () {
     test('invalid endpoint', () async {
       var mock = new RepositoryMock();
-      var server = new ShelfPubServer(mock);
+//      var server = new ShelfPubServer(mock);
+      final r = router()..addAll(new PubApiResource(mock));
 
       testInvalidUrl(String path) async {
         var request = getRequest(path);
-        var response = await server.requestHandler(request);
+        var response = await r.handler(request);
         await response.read().drain();
         expect(response.statusCode, equals(404));
       }
