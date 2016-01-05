@@ -179,6 +179,15 @@ class PackagesResource {
     return _addUploader(package, body['email']);
   }
 
+  @Delete('uploaders')
+  removeUploader(String package, String user) {
+    if (!repository.supportsUploaders) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    return removeUploader(package, user);
+  }
+
   Future<shelf.Response> _addUploader(String package, String user) async {
     try {
       await repository.addUploader(package, user);
@@ -431,20 +440,7 @@ class ShelfPubServer {
   Future<shelf.Response> requestHandler(shelf.Request request) {
     String path = request.requestedUri.path;
 
-    if (request.method == 'POST') {
-////        if (!repository.supportsUploaders) {
-////          return new Future.value(new shelf.Response.notFound(null));
-////        }
-//
-//        var addUploaderMatch = _addUploaderRegexp.matchAsPrefix(path);
-//        if (addUploaderMatch != null) {
-//          String package = Uri.decodeComponent(addUploaderMatch.group(1));
-//          return request.readAsString().then((String body) {
-//            return _addUploader(package, body);
-//          });
-//        }
-//      }
-    } else if (request.method == 'DELETE') {
+    if (request.method == 'POST') {} else if (request.method == 'DELETE') {
       if (!repository.supportsUploaders) {
         return new Future.value(new shelf.Response.notFound(null));
       }
