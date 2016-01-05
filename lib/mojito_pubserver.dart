@@ -11,11 +11,11 @@ import 'package:logging/logging.dart';
 import 'package:mime/mime.dart';
 import 'package:pub_semver/pub_semver.dart' as semver;
 import 'package:shelf/shelf.dart' as shelf;
+import 'package:shelf/shelf.dart';
+import 'package:shelf_rest/shelf_rest.dart';
 import 'package:yaml/yaml.dart';
 
 import 'repository.dart';
-import 'package:shelf_rest/shelf_rest.dart';
-import 'package:shelf/shelf.dart';
 
 final Logger _logger = new Logger('pubserver.shelf_pubserver');
 
@@ -137,7 +137,7 @@ class PubApiResource {
   PubApiResource(this.repository, {this.cache});
 
   @AddAll(path: 'api/packages')
-  PackagesResource packages() => new PackagesResource();
+  PackagesResource packages() => new PackagesResource(repository, cache: cache);
 
   @Get('packages/{package}/versions/{version}.tar.gz')
   Future<shelf.Response> download(
@@ -161,12 +161,93 @@ class PubApiResource {
 
 @RestResource('package')
 class PackagesResource {
+  final PackageRepository repository;
+  final PackageCache cache;
+
+  PackagesResource(this.repository, {this.cache});
+
   @AddAll(path: 'versions')
-  VersionsResource packages() => new VersionsResource();
+  VersionsResource packages() => new VersionsResource(repository, cache: cache);
 }
 
 @RestResource('version')
-class VersionsResource {}
+class VersionsResource {
+  final PackageRepository repository;
+  final PackageCache cache;
+
+  VersionsResource(this.repository, {this.cache});
+
+  Future<shelf.Response> search(String package, Request request) =>
+      _listVersions(request.requestedUri, package);
+
+  Future<shelf.Response> _listVersions(Uri uri, String package) async {
+    if (cache != null) {
+      var binaryJson = await cache.getPackageData(package);
+      if (binaryJson != null) {
+        return _binaryJsonResponse(binaryJson);
+      }
+    }
+
+    return repository
+        .versions(package)
+        .toList()
+        .then((List<PackageVersion> packageVersions) async {
+      if (packageVersions.length == 0) {
+        return new shelf.Response.notFound(null);
+      }
+
+      packageVersions.sort((a, b) => a.version.compareTo(b.version));
+
+      // TODO: Add legacy entries (if necessary), such as version_url.
+      Map packageVersion2Json(PackageVersion version) {
+        return {
+          'archive_url': '${_downloadUrl(
+            uri, version.packageName, version.versionString)}',
+          'pubspec': loadYaml(version.pubspecYaml),
+          'version': version.versionString,
+        };
+      }
+
+      var latestVersion = packageVersions.last;
+      for (int i = packageVersions.length - 1; i >= 0; i--) {
+        if (!packageVersions[i].version.isPreRelease) {
+          latestVersion = packageVersions[i];
+          break;
+        }
+      }
+
+      // TODO: The 'latest' is something we should get rid of, since it's
+      // duplicated in 'versions'.
+      var binaryJson = JSON.encoder.fuse(UTF8.encoder).convert({
+        'name': package,
+        'latest': packageVersion2Json(latestVersion),
+        'versions': packageVersions.map(packageVersion2Json).toList(),
+      });
+      if (cache != null) {
+        await cache.setPackageData(package, binaryJson);
+      }
+      return _binaryJsonResponse(binaryJson);
+    });
+  }
+
+  Future<shelf.Response> _showVersion(Uri uri, String package, String version) {
+    return repository
+        .lookupVersion(package, version)
+        .then((PackageVersion version) {
+      if (version == null) {
+        return new shelf.Response.notFound('');
+      }
+
+      // TODO: Add legacy entries (if necessary), such as version_url.
+      return _jsonResponse({
+        'archive_url': '${_downloadUrl(
+          uri, version.packageName, version.versionString)}',
+        'pubspec': loadYaml(version.pubspecYaml),
+        'version': version.versionString,
+      });
+    });
+  }
+}
 
 class ShelfPubServer {
   static final RegExp _packageRegexp = new RegExp(r'^/api/packages/([^/]+)$');
@@ -192,16 +273,16 @@ class ShelfPubServer {
     if (request.method == 'GET') {
       var packageMatch = _packageRegexp.matchAsPrefix(path);
       if (packageMatch != null) {
-        var package = Uri.decodeComponent(packageMatch.group(1));
-        return _listVersions(request.requestedUri, package);
+//        var package = Uri.decodeComponent(packageMatch.group(1));
+//        return _listVersions(request.requestedUri, package);
       }
 
       var versionMatch = _versionRegexp.matchAsPrefix(path);
       if (versionMatch != null) {
         var package = Uri.decodeComponent(versionMatch.group(1));
         var version = Uri.decodeComponent(versionMatch.group(2));
-        if (!isSemanticVersion(version)) return _invalidVersion(version);
-        return _showVersion(request.requestedUri, package, version);
+//        if (!isSemanticVersion(version)) return _invalidVersion(version);
+//        return _showVersion(request.requestedUri, package, version);
       }
 
       if (path == '/api/packages/versions/new') {
@@ -264,74 +345,6 @@ class ShelfPubServer {
   }
 
   // Metadata handlers.
-
-  Future<shelf.Response> _listVersions(Uri uri, String package) async {
-    if (cache != null) {
-      var binaryJson = await cache.getPackageData(package);
-      if (binaryJson != null) {
-        return _binaryJsonResponse(binaryJson);
-      }
-    }
-
-    return repository
-        .versions(package)
-        .toList()
-        .then((List<PackageVersion> packageVersions) async {
-      if (packageVersions.length == 0) {
-        return new shelf.Response.notFound(null);
-      }
-
-      packageVersions.sort((a, b) => a.version.compareTo(b.version));
-
-      // TODO: Add legacy entries (if necessary), such as version_url.
-      Map packageVersion2Json(PackageVersion version) {
-        return {
-          'archive_url': '${_downloadUrl(
-                  uri, version.packageName, version.versionString)}',
-          'pubspec': loadYaml(version.pubspecYaml),
-          'version': version.versionString,
-        };
-      }
-
-      var latestVersion = packageVersions.last;
-      for (int i = packageVersions.length - 1; i >= 0; i--) {
-        if (!packageVersions[i].version.isPreRelease) {
-          latestVersion = packageVersions[i];
-          break;
-        }
-      }
-
-      // TODO: The 'latest' is something we should get rid of, since it's
-      // duplicated in 'versions'.
-      var binaryJson = JSON.encoder.fuse(UTF8.encoder).convert({
-        'name': package,
-        'latest': packageVersion2Json(latestVersion),
-        'versions': packageVersions.map(packageVersion2Json).toList(),
-      });
-      if (cache != null) {
-        await cache.setPackageData(package, binaryJson);
-      }
-      return _binaryJsonResponse(binaryJson);
-    });
-  }
-
-  Future<shelf.Response> _showVersion(Uri uri, String package, String version) {
-    return repository
-        .lookupVersion(package, version)
-        .then((PackageVersion version) {
-      if (version == null) {
-        return new shelf.Response.notFound('');
-      }
-
-      // TODO: Add legacy entries (if necessary), such as version_url.
-      return _jsonResponse({
-        'archive_url': '${_downloadUrl(
-                    uri, version.packageName, version.versionString)}',
-        'pubspec': loadYaml(version.pubspecYaml),
-        'version': version.versionString,
-      });
-    });
-  }
 
   // Download handlers.
 
@@ -473,47 +486,6 @@ class ShelfPubServer {
       return _unauthorizedRequest();
     }
   }
-
-  Future<shelf.Response> _binaryJsonResponse(List<int> d, {int status: 200}) {
-    return new Future.sync(() {
-      return new shelf.Response(status,
-          body: new Stream.fromIterable([d]),
-          headers: {'content-type': 'application/json'});
-    });
-  }
-
-  Future<shelf.Response> _jsonResponse(Map json, {int status: 200}) {
-    return new Future.sync(() {
-      return new shelf.Response(status,
-          body: JSON.encode(json),
-          headers: {'content-type': 'application/json'});
-    });
-  }
-
-  // Download urls.
-
-  Uri _downloadUrl(Uri url, String package, String version) {
-    var encode = Uri.encodeComponent;
-    return url.resolve(
-        '/packages/${encode(package)}/versions/${encode(version)}.tar.gz');
-  }
-
-  // Upload async urls.
-
-  Uri _finishUploadAsyncUrl(Uri url) {
-    return url.resolve('/api/packages/versions/newUploadFinish');
-  }
-
-  // Upload custom urls.
-
-  Uri _uploadSimpleUrl(Uri url) {
-    return url.resolve('/api/packages/versions/newUpload');
-  }
-
-  Uri _finishUploadSimpleUrl(Uri url, {String error}) {
-    var postfix = error == null ? '' : '?error=${Uri.encodeComponent(error)}';
-    return url.resolve('/api/packages/versions/newUploadFinish$postfix');
-  }
 }
 
 bool isSemanticVersion(String version) {
@@ -563,4 +535,45 @@ Future<shelf.Response> _badRequest(String message) {
         'error': {'message': message}
       }),
       headers: {'content-type': 'application/json'}));
+}
+
+Future<shelf.Response> _binaryJsonResponse(List<int> d, {int status: 200}) {
+  return new Future.sync(() {
+    return new shelf.Response(status,
+        body: new Stream.fromIterable([d]),
+        headers: {'content-type': 'application/json'});
+  });
+}
+
+// TODO: avoid
+Future<shelf.Response> _jsonResponse(Map json, {int status: 200}) {
+  return new Future.sync(() {
+    return new shelf.Response(status,
+        body: JSON.encode(json), headers: {'content-type': 'application/json'});
+  });
+}
+
+// Download urls.
+
+Uri _downloadUrl(Uri url, String package, String version) {
+  var encode = Uri.encodeComponent;
+  return url.resolve(
+      '/packages/${encode(package)}/versions/${encode(version)}.tar.gz');
+}
+
+// Upload async urls.
+
+Uri _finishUploadAsyncUrl(Uri url) {
+  return url.resolve('/api/packages/versions/newUploadFinish');
+}
+
+// Upload custom urls.
+
+Uri _uploadSimpleUrl(Uri url) {
+  return url.resolve('/api/packages/versions/newUpload');
+}
+
+Uri _finishUploadSimpleUrl(Uri url, {String error}) {
+  var postfix = error == null ? '' : '?error=${Uri.encodeComponent(error)}';
+  return url.resolve('/api/packages/versions/newUploadFinish$postfix');
 }
