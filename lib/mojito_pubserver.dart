@@ -15,6 +15,7 @@ import 'package:yaml/yaml.dart';
 
 import 'repository.dart';
 import 'package:shelf_rest/shelf_rest.dart';
+import 'package:shelf/shelf.dart';
 
 final Logger _logger = new Logger('pubserver.shelf_pubserver');
 
@@ -130,21 +131,41 @@ final Logger _logger = new Logger('pubserver.shelf_pubserver');
 ///
 
 class PubApiResource {
+  final PackageRepository repository;
+  final PackageCache cache;
+
+  PubApiResource(this.repository, {this.cache});
+
   @AddAll(path: 'api/packages')
   PackagesResource packages() => new PackagesResource();
 
-  @Get('packages/{packageName}/versions/{versionName}.tar.gz')
-  Map download(String packageName, String versionName) =>
-    {packageName: versionName};
+  @Get('packages/{package}/versions/{version}.tar.gz')
+  Future<shelf.Response> download(
+      String package, String version, Request request) {
+    if (!isSemanticVersion(version)) return _invalidVersion(version);
+    return _download(request.requestedUri, package, version);
+  }
+
+  Future<shelf.Response> _download(Uri uri, String package, String version) {
+    if (repository.supportsDownloadUrl) {
+      return repository.downloadUrl(package, version).then((Uri url) {
+        // This is a redirect to [url]
+        return new shelf.Response.seeOther(url);
+      });
+    }
+    return repository.download(package, version).then((stream) {
+      return new shelf.Response.ok(stream);
+    });
+  }
 }
 
-@RestResource('packageName')
+@RestResource('package')
 class PackagesResource {
   @AddAll(path: 'versions')
   VersionsResource packages() => new VersionsResource();
 }
 
-@RestResource('versionName')
+@RestResource('version')
 class VersionsResource {}
 
 class ShelfPubServer {
@@ -277,7 +298,7 @@ class ShelfPubServer {
       Map packageVersion2Json(PackageVersion version) {
         return {
           'archive_url': '${_downloadUrl(
-                  uri, version.packageName, version.versionString)}',
+                  uri, version.package, version.versionString)}',
           'pubspec': loadYaml(version.pubspecYaml),
           'version': version.versionString,
         };
@@ -316,7 +337,7 @@ class ShelfPubServer {
       // TODO: Add legacy entries (if necessary), such as version_url.
       return _jsonResponse({
         'archive_url': '${_downloadUrl(
-                    uri, version.packageName, version.versionString)}',
+                    uri, version.package, version.versionString)}',
         'pubspec': loadYaml(version.pubspecYaml),
         'version': version.versionString,
       });
@@ -350,8 +371,8 @@ class ShelfPubServer {
   Future<shelf.Response> _finishUploadAsync(Uri uri) {
     return repository.finishAsyncUpload(uri).then((PackageVersion vers) async {
       if (cache != null) {
-        _logger.info('Invalidating cache for package ${vers.packageName}.');
-        await cache.invalidatePackageData(vers.packageName);
+        _logger.info('Invalidating cache for package ${vers.package}.');
+        await cache.invalidatePackageData(vers.package);
       }
       return _jsonResponse({
         'success': {'message': 'Successfully uploaded package.',},
@@ -401,9 +422,9 @@ class ShelfPubServer {
           // `form-data; name="file"; filename="package.tar.gz`
           repository.upload(part).then((PackageVersion version) async {
             if (cache != null) {
-              _logger.info(
-                  'Invalidating cache for package ${version.packageName}.');
-              await cache.invalidatePackageData(version.packageName);
+              _logger
+                  .info('Invalidating cache for package ${version.package}.');
+              await cache.invalidatePackageData(version.package);
             }
             _logger.info('Redirecting to found url.');
             return new shelf.Response.found(_finishUploadSimpleUrl(uri));
@@ -464,37 +485,6 @@ class ShelfPubServer {
     }
   }
 
-  // Helper functions.
-
-  Future<shelf.Response> _invalidVersion(String version) {
-    return _badRequest(
-        'Version string "$version" is not a valid semantic version.');
-  }
-
-  Future<shelf.Response> _successfullRequest(String message) {
-    return new Future.value(new shelf.Response(200,
-        body: JSON.encode({
-          'success': {'message': message}
-        }),
-        headers: {'content-type': 'application/json'}));
-  }
-
-  Future<shelf.Response> _unauthorizedRequest() {
-    return new Future.value(new shelf.Response(403,
-        body: JSON.encode({
-          'error': {'message': 'Unauthorized request.'}
-        }),
-        headers: {'content-type': 'application/json'}));
-  }
-
-  Future<shelf.Response> _badRequest(String message) {
-    return new Future.value(new shelf.Response(400,
-        body: JSON.encode({
-          'error': {'message': message}
-        }),
-        headers: {'content-type': 'application/json'}));
-  }
-
   Future<shelf.Response> _binaryJsonResponse(List<int> d, {int status: 200}) {
     return new Future.sync(() {
       return new shelf.Response(status,
@@ -535,14 +525,14 @@ class ShelfPubServer {
     var postfix = error == null ? '' : '?error=${Uri.encodeComponent(error)}';
     return url.resolve('/api/packages/versions/newUploadFinish$postfix');
   }
+}
 
-  bool isSemanticVersion(String version) {
-    try {
-      new semver.Version.parse(version);
-      return true;
-    } catch (_) {
-      return false;
-    }
+bool isSemanticVersion(String version) {
+  try {
+    new semver.Version.parse(version);
+    return true;
+  } catch (_) {
+    return false;
   }
 }
 
@@ -553,4 +543,35 @@ abstract class PackageCache {
   Future<List<int>> getPackageData(String package);
 
   Future invalidatePackageData(String package);
+}
+
+// Helper functions.
+
+Future<shelf.Response> _invalidVersion(String version) {
+  return _badRequest(
+      'Version string "$version" is not a valid semantic version.');
+}
+
+Future<shelf.Response> _successfullRequest(String message) {
+  return new Future.value(new shelf.Response(200,
+      body: JSON.encode({
+        'success': {'message': message}
+      }),
+      headers: {'content-type': 'application/json'}));
+}
+
+Future<shelf.Response> _unauthorizedRequest() {
+  return new Future.value(new shelf.Response(403,
+      body: JSON.encode({
+        'error': {'message': 'Unauthorized request.'}
+      }),
+      headers: {'content-type': 'application/json'}));
+}
+
+Future<shelf.Response> _badRequest(String message) {
+  return new Future.value(new shelf.Response(400,
+      body: JSON.encode({
+        'error': {'message': message}
+      }),
+      headers: {'content-type': 'application/json'}));
 }
