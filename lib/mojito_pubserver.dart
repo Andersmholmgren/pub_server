@@ -421,57 +421,6 @@ class VersionsResource {
   }
 }
 
-class ShelfPubServer {
-  static final RegExp _removeUploaderRegexp =
-      new RegExp(r'^/api/packages/([^/]+)/uploaders/([^/]+)$');
-
-  static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
-
-  final PackageRepository repository;
-  final PackageCache cache;
-
-  ShelfPubServer(this.repository, {this.cache});
-
-  Future<shelf.Response> requestHandler(shelf.Request request) {
-    String path = request.requestedUri.path;
-
-    if (request.method == 'POST') {} else if (request.method == 'DELETE') {
-      if (!repository.supportsUploaders) {
-        return new Future.value(new shelf.Response.notFound(null));
-      }
-
-      var removeUploaderMatch = _removeUploaderRegexp.matchAsPrefix(path);
-      if (removeUploaderMatch != null) {
-        String package = Uri.decodeComponent(removeUploaderMatch.group(1));
-        String user = Uri.decodeComponent(removeUploaderMatch.group(2));
-        return removeUploader(package, user);
-      }
-    }
-    return new Future.value(new shelf.Response.notFound(null));
-  }
-
-  // Metadata handlers.
-
-  // Download handlers.
-
-  Future<shelf.Response> _download(Uri uri, String package, String version) {
-    if (repository.supportsDownloadUrl) {
-      return repository.downloadUrl(package, version).then((Uri url) {
-        // This is a redirect to [url]
-        return new shelf.Response.seeOther(url);
-      });
-    }
-    return repository.download(package, version).then((stream) {
-      return new shelf.Response.ok(stream);
-    });
-  }
-
-  // Upload async handlers.
-
-  // Uploader handlers.
-
-}
-
 bool isSemanticVersion(String version) {
   try {
     new semver.Version.parse(version);
