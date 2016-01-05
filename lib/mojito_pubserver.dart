@@ -213,6 +213,7 @@ class PackagesResource {
 class VersionsResource {
   final PackageRepository repository;
   final PackageCache cache;
+  static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
 
   VersionsResource(this.repository, {this.cache});
 
