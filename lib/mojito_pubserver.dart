@@ -180,6 +180,9 @@ class VersionsResource {
   Future<shelf.Response> search(String package, Request request) =>
       _listVersions(request.requestedUri, package);
 
+  Future find(String package, String version, Request request) =>
+      _showVersion(request.requestedUri, package, version);
+
   Future<shelf.Response> _listVersions(Uri uri, String package) async {
     if (cache != null) {
       var binaryJson = await cache.getPackageData(package);
@@ -272,10 +275,10 @@ class ShelfPubServer {
     String path = request.requestedUri.path;
     if (request.method == 'GET') {
       var packageMatch = _packageRegexp.matchAsPrefix(path);
-      if (packageMatch != null) {
-//        var package = Uri.decodeComponent(packageMatch.group(1));
-//        return _listVersions(request.requestedUri, package);
-      }
+//      if (packageMatch != null) {
+////        var package = Uri.decodeComponent(packageMatch.group(1));
+////        return _listVersions(request.requestedUri, package);
+//      }
 
       var versionMatch = _versionRegexp.matchAsPrefix(path);
       if (versionMatch != null) {
