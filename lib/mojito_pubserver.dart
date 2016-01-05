@@ -180,9 +180,6 @@ class ShelfPubServer {
   static final RegExp _removeUploaderRegexp =
       new RegExp(r'^/api/packages/([^/]+)/uploaders/([^/]+)$');
 
-  static final RegExp _downloadRegexp =
-      new RegExp(r'^/packages/([^/]+)/versions/([^/]+)\.tar\.gz$');
-
   static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
 
   final PackageRepository repository;
@@ -193,14 +190,6 @@ class ShelfPubServer {
   Future<shelf.Response> requestHandler(shelf.Request request) {
     String path = request.requestedUri.path;
     if (request.method == 'GET') {
-      var downloadMatch = _downloadRegexp.matchAsPrefix(path);
-      if (downloadMatch != null) {
-        var package = Uri.decodeComponent(downloadMatch.group(1));
-        var version = Uri.decodeComponent(downloadMatch.group(2));
-        if (!isSemanticVersion(version)) return _invalidVersion(version);
-        return _download(request.requestedUri, package, version);
-      }
-
       var packageMatch = _packageRegexp.matchAsPrefix(path);
       if (packageMatch != null) {
         var package = Uri.decodeComponent(packageMatch.group(1));
