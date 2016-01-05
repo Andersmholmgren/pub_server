@@ -206,6 +206,16 @@ class VersionsResource {
     }
   }
 
+  @Post('newUpload')
+  Future<Response> newUpload(Request request) {
+    if (!repository.supportsUpload) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    return _uploadSimple(
+        request.requestedUri, request.headers['content-type'], request.read());
+  }
+
   Future find(String package, String version, Request request) =>
       _showVersion(request.requestedUri, package, version);
 
@@ -393,45 +403,8 @@ class ShelfPubServer {
 
   Future<shelf.Response> requestHandler(shelf.Request request) {
     String path = request.requestedUri.path;
-    if (request.method == 'GET') {
-      var packageMatch = _packageRegexp.matchAsPrefix(path);
-//      if (packageMatch != null) {
-////        var package = Uri.decodeComponent(packageMatch.group(1));
-////        return _listVersions(request.requestedUri, package);
-//      }
 
-      var versionMatch = _versionRegexp.matchAsPrefix(path);
-      if (versionMatch != null) {
-        var package = Uri.decodeComponent(versionMatch.group(1));
-        var version = Uri.decodeComponent(versionMatch.group(2));
-//        if (!isSemanticVersion(version)) return _invalidVersion(version);
-//        return _showVersion(request.requestedUri, package, version);
-      }
-
-      if (path == '/api/packages/versions/new') {
-        if (!repository.supportsUpload) {
-          return new Future.value(new shelf.Response.notFound(null));
-        }
-
-        if (repository.supportsAsyncUpload) {
-          return _startUploadAsync(request.requestedUri);
-        } else {
-          return _startUploadSimple(request.requestedUri);
-        }
-      }
-
-      if (path == '/api/packages/versions/newUploadFinish') {
-        if (!repository.supportsUpload) {
-          return new Future.value(new shelf.Response.notFound(null));
-        }
-
-        if (repository.supportsAsyncUpload) {
-          return _finishUploadAsync(request.requestedUri);
-        } else {
-          return _finishUploadSimple(request.requestedUri);
-        }
-      }
-    } else if (request.method == 'POST') {
+    if (request.method == 'POST') {
       if (path == '/api/packages/versions/newUpload') {
         if (!repository.supportsUpload) {
           return new Future.value(new shelf.Response.notFound(null));
