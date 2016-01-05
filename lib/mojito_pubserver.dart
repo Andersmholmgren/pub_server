@@ -193,21 +193,21 @@ class VersionsResource {
     }
   }
 
+  @Get('newUploadFinish')
+  Future<Response> newUploadFinish(Request request) {
+    if (!repository.supportsUpload) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    if (repository.supportsAsyncUpload) {
+      return _finishUploadAsync(request.requestedUri);
+    } else {
+      return _finishUploadSimple(request.requestedUri);
+    }
+  }
+
   Future find(String package, String version, Request request) =>
       _showVersion(request.requestedUri, package, version);
-
-//  if (path == '/api/packages/versions/newUploadFinish') {
-//  if (!repository.supportsUpload) {
-//  return new Future.value(new shelf.Response.notFound(null));
-//  }
-//
-//  if (repository.supportsAsyncUpload) {
-//  return _finishUploadAsync(request.requestedUri);
-//  } else {
-//  return _finishUploadSimple(request.requestedUri);
-//  }
-//  }
-//} else if (request.method == 'POST') {
 
   Future<shelf.Response> _listVersions(Uri uri, String package) async {
     if (cache != null) {
