@@ -167,7 +167,42 @@ class PackagesResource {
   PackagesResource(this.repository, {this.cache});
 
   @AddAll(path: 'versions')
-  VersionsResource packages() => new VersionsResource(repository, cache: cache);
+  VersionsResource versions() => new VersionsResource(repository, cache: cache);
+
+  @Post('uploaders')
+  Future<Response> addUpLoaders(String package,
+      @RequestBody(format: ContentType.FORM) Map<String, Object> body) {
+    if (!repository.supportsUploaders) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    return _addUploader(package, body['email']);
+  }
+
+  Future<shelf.Response> _addUploader(String package, String user) async {
+    try {
+      await repository.addUploader(package, user);
+      return _successfullRequest('Successfully added uploader to package.');
+    } on UploaderAlreadyExistsException {
+      return _badRequest('Cannot add an already-existent uploader to package.');
+    } on UnauthorizedAccessException {
+      return _unauthorizedRequest();
+    }
+
+    return _badRequest('Invalid request');
+  }
+
+  Future<shelf.Response> removeUploader(
+      String package, String userEmail) async {
+    try {
+      await repository.removeUploader(package, userEmail);
+      return _successfullRequest('Successfully removed uploader from package.');
+    } on LastUploaderRemoveException {
+      return _badRequest('Cannot remove last uploader of a package.');
+    } on UnauthorizedAccessException {
+      return _unauthorizedRequest();
+    }
+  }
 }
 
 @RestResource('version')
@@ -383,14 +418,6 @@ class VersionsResource {
 }
 
 class ShelfPubServer {
-  static final RegExp _packageRegexp = new RegExp(r'^/api/packages/([^/]+)$');
-
-  static final RegExp _versionRegexp =
-      new RegExp(r'^/api/packages/([^/]+)/versions/([^/]+)$');
-
-  static final RegExp _addUploaderRegexp =
-      new RegExp(r'^/api/packages/([^/]+)/uploaders$');
-
   static final RegExp _removeUploaderRegexp =
       new RegExp(r'^/api/packages/([^/]+)/uploaders/([^/]+)$');
 
@@ -405,26 +432,18 @@ class ShelfPubServer {
     String path = request.requestedUri.path;
 
     if (request.method == 'POST') {
-      if (path == '/api/packages/versions/newUpload') {
-        if (!repository.supportsUpload) {
-          return new Future.value(new shelf.Response.notFound(null));
-        }
-
-        return _uploadSimple(request.requestedUri,
-            request.headers['content-type'], request.read());
-      } else {
-        if (!repository.supportsUploaders) {
-          return new Future.value(new shelf.Response.notFound(null));
-        }
-
-        var addUploaderMatch = _addUploaderRegexp.matchAsPrefix(path);
-        if (addUploaderMatch != null) {
-          String package = Uri.decodeComponent(addUploaderMatch.group(1));
-          return request.readAsString().then((String body) {
-            return _addUploader(package, body);
-          });
-        }
-      }
+////        if (!repository.supportsUploaders) {
+////          return new Future.value(new shelf.Response.notFound(null));
+////        }
+//
+//        var addUploaderMatch = _addUploaderRegexp.matchAsPrefix(path);
+//        if (addUploaderMatch != null) {
+//          String package = Uri.decodeComponent(addUploaderMatch.group(1));
+//          return request.readAsString().then((String body) {
+//            return _addUploader(package, body);
+//          });
+//        }
+//      }
     } else if (request.method == 'DELETE') {
       if (!repository.supportsUploaders) {
         return new Future.value(new shelf.Response.notFound(null));
@@ -460,34 +479,6 @@ class ShelfPubServer {
 
   // Uploader handlers.
 
-  Future<shelf.Response> _addUploader(String package, String body) async {
-    var parts = body.split('=');
-    if (parts.length == 2 && parts[0] == 'email' && parts[1].length > 0) {
-      try {
-        var user = Uri.decodeQueryComponent(parts[1]);
-        await repository.addUploader(package, user);
-        return _successfullRequest('Successfully added uploader to package.');
-      } on UploaderAlreadyExistsException {
-        return _badRequest(
-            'Cannot add an already-existent uploader to package.');
-      } on UnauthorizedAccessException {
-        return _unauthorizedRequest();
-      }
-    }
-    return _badRequest('Invalid request');
-  }
-
-  Future<shelf.Response> removeUploader(
-      String package, String userEmail) async {
-    try {
-      await repository.removeUploader(package, userEmail);
-      return _successfullRequest('Successfully removed uploader from package.');
-    } on LastUploaderRemoveException {
-      return _badRequest('Cannot remove last uploader of a package.');
-    } on UnauthorizedAccessException {
-      return _unauthorizedRequest();
-    }
-  }
 }
 
 bool isSemanticVersion(String version) {

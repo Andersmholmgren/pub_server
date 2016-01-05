@@ -32,7 +32,7 @@ main(List<String> args) {
     exit(1);
   }
 
-  setupLogger();
+//  setupLogger();
   runPubServer(directory, host, port);
 }
 
