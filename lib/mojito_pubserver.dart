@@ -180,8 +180,34 @@ class VersionsResource {
   Future<shelf.Response> search(String package, Request request) =>
       _listVersions(request.requestedUri, package);
 
+  @Get('new')
+  Future<Response> upload(Request request) {
+    if (!repository.supportsUpload) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    if (repository.supportsAsyncUpload) {
+      return _startUploadAsync(request.requestedUri);
+    } else {
+      return _startUploadSimple(request.requestedUri);
+    }
+  }
+
   Future find(String package, String version, Request request) =>
       _showVersion(request.requestedUri, package, version);
+
+//  if (path == '/api/packages/versions/newUploadFinish') {
+//  if (!repository.supportsUpload) {
+//  return new Future.value(new shelf.Response.notFound(null));
+//  }
+//
+//  if (repository.supportsAsyncUpload) {
+//  return _finishUploadAsync(request.requestedUri);
+//  } else {
+//  return _finishUploadSimple(request.requestedUri);
+//  }
+//  }
+//} else if (request.method == 'POST') {
 
   Future<shelf.Response> _listVersions(Uri uri, String package) async {
     if (cache != null) {
@@ -248,6 +274,100 @@ class VersionsResource {
         'pubspec': loadYaml(version.pubspecYaml),
         'version': version.versionString,
       });
+    });
+  }
+
+  Future<shelf.Response> _startUploadAsync(Uri uri) {
+    return repository
+        .startAsyncUpload(_finishUploadAsyncUrl(uri))
+        .then((AsyncUploadInfo info) {
+      return _jsonResponse({'url': '${info.uri}', 'fields': info.fields,});
+    });
+  }
+
+  Future<shelf.Response> _finishUploadAsync(Uri uri) {
+    return repository.finishAsyncUpload(uri).then((PackageVersion vers) async {
+      if (cache != null) {
+        _logger.info('Invalidating cache for package ${vers.packageName}.');
+        await cache.invalidatePackageData(vers.packageName);
+      }
+      return _jsonResponse({
+        'success': {'message': 'Successfully uploaded package.',},
+      });
+    }).catchError((error, stack) {
+      _logger.warning('An error occured while finishing upload', error, stack);
+      return _jsonResponse({
+        'error': {'message': '$error.',},
+      }, status: 400);
+    });
+  }
+
+// Upload custom handlers.
+
+  Future<shelf.Response> _startUploadSimple(Uri url) {
+    _logger.info('Start simple upload.');
+    return _jsonResponse({'url': '${_uploadSimpleUrl(url)}', 'fields': {},});
+  }
+
+  Future<shelf.Response> _uploadSimple(
+      Uri uri, String contentType, Stream<List<int>> stream) {
+    _logger.info('Perform simple upload.');
+    if (contentType.startsWith('multipart/form-data')) {
+      var match = _boundaryRegExp.matchAsPrefix(contentType);
+      if (match != null) {
+        var boundary = match.group(1);
+
+// We have to listen to all multiparts: Just doing `parts.first` will
+// result in the cancelation of the subscription which causes
+// eventually a destruction of the socket, this is an odd side-effect.
+// What we would like to have is something like this:
+//     parts.expect(1).then((part) { upload(part); })
+        bool firstPartArrived = false;
+        var completer = new Completer();
+        var subscription;
+
+        var parts = stream.transform(new MimeMultipartTransformer(boundary));
+        subscription = parts.listen((MimeMultipart part) {
+// If we get more than one part, we'll ignore the rest of the input.
+          if (firstPartArrived) {
+            subscription.cancel();
+            return;
+          }
+          firstPartArrived = true;
+
+// TODO: Ensure that `part.headers['content-disposition']` is
+// `form-data; name="file"; filename="package.tar.gz`
+          repository.upload(part).then((PackageVersion version) async {
+            if (cache != null) {
+              _logger.info(
+                  'Invalidating cache for package ${version.packageName}.');
+              await cache.invalidatePackageData(version.packageName);
+            }
+            _logger.info('Redirecting to found url.');
+            return new shelf.Response.found(_finishUploadSimpleUrl(uri));
+          }).catchError((error, stack) {
+            _logger.warning('Error occured: $error\n$stack.');
+// TODO: Do error checking and return error codes?
+            return new shelf.Response.found(
+                _finishUploadSimpleUrl(uri, error: error));
+          }).then(completer.complete);
+        });
+
+        return completer.future;
+      }
+    }
+    return _badRequest(
+        'Upload must contain a multipart/form-data content type.');
+  }
+
+  Future<shelf.Response> _finishUploadSimple(Uri uri) {
+    var error = uri.queryParameters['error'];
+    _logger.info('Finish simple upload (error: $error).');
+    if (error != null) {
+      return _badRequest(error);
+    }
+    return _jsonResponse({
+      'success': {'message': 'Successfully uploaded package.'}
     });
   }
 }
@@ -364,100 +484,6 @@ class ShelfPubServer {
   }
 
   // Upload async handlers.
-
-  Future<shelf.Response> _startUploadAsync(Uri uri) {
-    return repository
-        .startAsyncUpload(_finishUploadAsyncUrl(uri))
-        .then((AsyncUploadInfo info) {
-      return _jsonResponse({'url': '${info.uri}', 'fields': info.fields,});
-    });
-  }
-
-  Future<shelf.Response> _finishUploadAsync(Uri uri) {
-    return repository.finishAsyncUpload(uri).then((PackageVersion vers) async {
-      if (cache != null) {
-        _logger.info('Invalidating cache for package ${vers.packageName}.');
-        await cache.invalidatePackageData(vers.packageName);
-      }
-      return _jsonResponse({
-        'success': {'message': 'Successfully uploaded package.',},
-      });
-    }).catchError((error, stack) {
-      _logger.warning('An error occured while finishing upload', error, stack);
-      return _jsonResponse({
-        'error': {'message': '$error.',},
-      }, status: 400);
-    });
-  }
-
-  // Upload custom handlers.
-
-  Future<shelf.Response> _startUploadSimple(Uri url) {
-    _logger.info('Start simple upload.');
-    return _jsonResponse({'url': '${_uploadSimpleUrl(url)}', 'fields': {},});
-  }
-
-  Future<shelf.Response> _uploadSimple(
-      Uri uri, String contentType, Stream<List<int>> stream) {
-    _logger.info('Perform simple upload.');
-    if (contentType.startsWith('multipart/form-data')) {
-      var match = _boundaryRegExp.matchAsPrefix(contentType);
-      if (match != null) {
-        var boundary = match.group(1);
-
-        // We have to listen to all multiparts: Just doing `parts.first` will
-        // result in the cancelation of the subscription which causes
-        // eventually a destruction of the socket, this is an odd side-effect.
-        // What we would like to have is something like this:
-        //     parts.expect(1).then((part) { upload(part); })
-        bool firstPartArrived = false;
-        var completer = new Completer();
-        var subscription;
-
-        var parts = stream.transform(new MimeMultipartTransformer(boundary));
-        subscription = parts.listen((MimeMultipart part) {
-          // If we get more than one part, we'll ignore the rest of the input.
-          if (firstPartArrived) {
-            subscription.cancel();
-            return;
-          }
-          firstPartArrived = true;
-
-          // TODO: Ensure that `part.headers['content-disposition']` is
-          // `form-data; name="file"; filename="package.tar.gz`
-          repository.upload(part).then((PackageVersion version) async {
-            if (cache != null) {
-              _logger.info(
-                  'Invalidating cache for package ${version.packageName}.');
-              await cache.invalidatePackageData(version.packageName);
-            }
-            _logger.info('Redirecting to found url.');
-            return new shelf.Response.found(_finishUploadSimpleUrl(uri));
-          }).catchError((error, stack) {
-            _logger.warning('Error occured: $error\n$stack.');
-            // TODO: Do error checking and return error codes?
-            return new shelf.Response.found(
-                _finishUploadSimpleUrl(uri, error: error));
-          }).then(completer.complete);
-        });
-
-        return completer.future;
-      }
-    }
-    return _badRequest(
-        'Upload must contain a multipart/form-data content type.');
-  }
-
-  Future<shelf.Response> _finishUploadSimple(Uri uri) {
-    var error = uri.queryParameters['error'];
-    _logger.info('Finish simple upload (error: $error).');
-    if (error != null) {
-      return _badRequest(error);
-    }
-    return _jsonResponse({
-      'success': {'message': 'Successfully uploaded package.'}
-    });
-  }
 
   // Uploader handlers.
 
