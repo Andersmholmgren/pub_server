@@ -539,12 +539,12 @@ class _PoorMansResourceDI {
       new VersionsResource(repository, cache: cache);
 }
 
+@deprecated // just here for test compatibility
 class ShelfPubServer {
   final PubApiResource _pubApiResource;
 
   ShelfPubServer(PackageRepository repository, {PackageCache cache})
-      : this._pubApiResource = new _PoorMansResourceDI(repository, cache: cache)
-            .createPubApiResource();
+      : this._pubApiResource = createPubApiResource(repository, cache: cache);
 
   Future<shelf.Response> requestHandler(shelf.Request request) {
     final r = router()..addAll(_pubApiResource);
@@ -552,3 +552,7 @@ class ShelfPubServer {
     return r.handler(request);
   }
 }
+
+PubApiResource createPubApiResource(PackageRepository repository,
+        {PackageCache cache}) =>
+    new _PoorMansResourceDI(repository, cache: cache).createPubApiResource();
