@@ -168,8 +168,9 @@ class PackagesResource extends _BaseApiResource {
       {PackageCache cache})
       : super(repository, cache);
 
-  // forwards to the versions search
-  Future<Response> search(String package, Request request) =>
+  // forwards to the versions search. Not pretty
+  @Get('{package}')
+  Future<Response> searchVersions(String package, Request request) =>
       _versionsResource.search(package, request);
 
   @AddAll(path: 'versions')
