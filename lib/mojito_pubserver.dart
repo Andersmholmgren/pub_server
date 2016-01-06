@@ -191,8 +191,8 @@ class PackagesResource extends _BaseApiResource {
   VersionsResource versions() => _versionsResource;
 
   @Post('{package}/uploaders')
-  Future<Response> addUpLoaders(String package,
-      @RequestBody(format: ContentType.FORM) Map body) {
+  Future<Response> addUpLoaders(
+      String package, @RequestBody(format: ContentType.FORM) Map body) {
     if (!repository.supportsUploaders) {
       return new Future.value(new shelf.Response.notFound(null));
     }
@@ -201,7 +201,7 @@ class PackagesResource extends _BaseApiResource {
   }
 
   @Delete('{package}/uploaders/{userEmail}')
-  removeUploader(String package, String userEmail) async {
+  Future<Response> removeUploader(String package, String userEmail) async {
     if (!repository.supportsUploaders) {
       return new Future.value(new shelf.Response.notFound(null));
     }
