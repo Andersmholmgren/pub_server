@@ -191,8 +191,8 @@ class PackagesResource extends _BaseApiResource {
   VersionsResource versions() => _versionsResource;
 
   @Post('{package}/uploaders')
-  Future<Response> addUpLoaders(String package,
-      @RequestBody(format: ContentType.FORM) Map body) {
+  Future<Response> addUpLoaders(
+      String package, @RequestBody(format: ContentType.FORM) Map body) {
     if (!repository.supportsUploaders) {
       return new Future.value(new shelf.Response.notFound(null));
     }
@@ -200,8 +200,8 @@ class PackagesResource extends _BaseApiResource {
     return _addUploader(package, body['email']);
   }
 
-  @Delete('uploaders/{userEmail}')
-  removeUploader(String package, String userEmail) async {
+  @Delete('{package}/uploaders/{userEmail}')
+  Future<Response> removeUploader(String package, String userEmail) async {
     if (!repository.supportsUploaders) {
       return new Future.value(new shelf.Response.notFound(null));
     }
@@ -276,8 +276,10 @@ class VersionsResource extends _BaseApiResource {
         request.requestedUri, request.headers['content-type'], request.read());
   }
 
-  Future find(String package, String version, Request request) =>
-      _showVersion(request.requestedUri, package, version);
+  Future<Response> find(String package, String version, Request request) {
+    if (!isSemanticVersion(version)) return _invalidVersion(version);
+    return _showVersion(request.requestedUri, package, version);
+  }
 
   Future<shelf.Response> _listVersions(Uri uri, String package) async {
     if (cache != null) {
