@@ -130,22 +130,6 @@ final Logger _logger = new Logger('pubserver.shelf_pubserver');
 /// this HTTP endpoint.
 ///
 
-class ResourceDI {
-  final PackageRepository repository;
-  final PackageCache cache;
-
-  ResourceDI(this.repository, {this.cache});
-
-  PubApiResource createPubApiResource() =>
-      new PubApiResource(repository, createPackagesResource(), cache: cache);
-
-  PackagesResource createPackagesResource() =>
-      new PackagesResource(repository, createVersionsResource(), cache: cache);
-
-  VersionsResource createVersionsResource() =>
-      new VersionsResource(repository, cache: cache);
-}
-
 class PubApiResource {
   final PackageRepository repository;
   final PackageCache cache;
@@ -533,12 +517,28 @@ Uri _finishUploadSimpleUrl(Uri url, {String error}) {
   return url.resolve('/api/packages/versions/newUploadFinish$postfix');
 }
 
+class _PoorMansResourceDI {
+  final PackageRepository repository;
+  final PackageCache cache;
+
+  _PoorMansResourceDI(this.repository, {this.cache});
+
+  PubApiResource createPubApiResource() =>
+      new PubApiResource(repository, createPackagesResource(), cache: cache);
+
+  PackagesResource createPackagesResource() =>
+      new PackagesResource(repository, createVersionsResource(), cache: cache);
+
+  VersionsResource createVersionsResource() =>
+      new VersionsResource(repository, cache: cache);
+}
+
 class ShelfPubServer {
   final PubApiResource _pubApiResource;
 
   ShelfPubServer(PackageRepository repository, {PackageCache cache})
-      : this._pubApiResource =
-            new ResourceDI(repository, cache: cache).createPubApiResource();
+      : this._pubApiResource = new _PoorMansResourceDI(repository, cache: cache)
+            .createPubApiResource();
 
   Future<shelf.Response> requestHandler(shelf.Request request) {
     final r = router()..addAll(_pubApiResource);
