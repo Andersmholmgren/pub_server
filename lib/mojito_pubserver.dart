@@ -178,6 +178,10 @@ class PackagesResource extends _BaseApiResource {
   Future<Map> uploadVersion(Request request) =>
       _versionsResource.upload(request);
 
+  @Post('versions/newUpload')
+  Future<Response> newVersionUpload(Request request) =>
+      _versionsResource.newUpload(request);
+
   // forwards to the versions new. Not pretty but URL scheme a bit odd
   @Get('versions/newUploadFinish')
   Future<Response> newUploadVersionFinish(Request request) =>
@@ -186,9 +190,9 @@ class PackagesResource extends _BaseApiResource {
   @AddAll(path: 'versions')
   VersionsResource versions() => _versionsResource;
 
-  @Post('uploaders')
+  @Post('{package}/uploaders')
   Future<Response> addUpLoaders(String package,
-      @RequestBody(format: ContentType.FORM) Map<String, Object> body) {
+      @RequestBody(format: ContentType.FORM) Map body) {
     if (!repository.supportsUploaders) {
       return new Future.value(new shelf.Response.notFound(null));
     }
