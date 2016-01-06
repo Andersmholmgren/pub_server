@@ -130,15 +130,28 @@ final Logger _logger = new Logger('pubserver.shelf_pubserver');
 /// this HTTP endpoint.
 ///
 
+class ResourceDI {
+  final PackageRepository repository;
+  final PackageCache cache;
+
+  ResourceDI(this.repository, {this.cache});
+
+  PubApiResource createPubApiResource() =>
+      new PubApiResource(repository, createPackagesResource(), cache: cache);
+
+  PackagesResource createPackagesResource() =>
+      new PackagesResource(repository, createVersionsResource(), cache: cache);
+
+  VersionsResource createVersionsResource() =>
+      new VersionsResource(repository, cache: cache);
+}
+
 class PubApiResource {
   final PackageRepository repository;
   final PackageCache cache;
   final PackagesResource _packagesResource;
 
-  PubApiResource(PackageRepository repository, {PackageCache cache})
-      : this.repository = repository,
-        this.cache = cache,
-        this._packagesResource = new PackagesResource(repository, cache: cache);
+  PubApiResource(this.repository, this._packagesResource, {this.cache});
 
   @AddAll(path: 'api/packages')
   PackagesResource packages() => _packagesResource;
@@ -169,13 +182,14 @@ class PackagesResource {
   final PackageCache cache;
   final VersionsResource _versionsResource;
 
-  PackagesResource(PackageRepository repository, {PackageCache cache})
-      : this.repository = repository,
-        this.cache = cache,
-        this._versionsResource = new VersionsResource(repository, cache: cache);
+  PackagesResource(this.repository, this._versionsResource, {this.cache});
+
+  // forwards to the versions search
+  Future<Response> search(String package, Request request) =>
+      _versionsResource.search(package, request);
 
   @AddAll(path: 'versions')
-  VersionsResource versions() => new VersionsResource(repository, cache: cache);
+  VersionsResource versions() => _versionsResource;
 
   @Post('uploaders')
   Future<Response> addUpLoaders(String package,
@@ -520,13 +534,14 @@ Uri _finishUploadSimpleUrl(Uri url, {String error}) {
 }
 
 class ShelfPubServer {
-  final PackageRepository repository;
-  final PackageCache cache;
+  final PubApiResource _pubApiResource;
 
-  ShelfPubServer(this.repository, {this.cache});
+  ShelfPubServer(PackageRepository repository, {PackageCache cache})
+      : this._pubApiResource =
+            new ResourceDI(repository, cache: cache).createPubApiResource();
 
   Future<shelf.Response> requestHandler(shelf.Request request) {
-    final r = router()..addAll(new PubApiResource(repository, cache: cache));
+    final r = router()..addAll(_pubApiResource);
 
     return r.handler(request);
   }
