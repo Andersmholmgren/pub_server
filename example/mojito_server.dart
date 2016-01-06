@@ -51,7 +51,7 @@ runPubServer(String baseDir, String host, int port) {
 //  return shelf_io.serve(server.requestHandler, host, port);
   final app = init();
 
-  app.router.addAll(new PubApiResource(cow));
+  app.router.addAll(new ShelfPubServer(cow));
 
   app.start();
 }

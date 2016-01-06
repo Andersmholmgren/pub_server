@@ -129,13 +129,20 @@ final Logger _logger = new Logger('pubserver.shelf_pubserver');
 /// It will use the pub [PackageRepository] given in the constructor to provide
 /// this HTTP endpoint.
 ///
-
-class PubApiResource {
+///
+abstract class BaseApiResource {
   final PackageRepository repository;
   final PackageCache cache;
+
+  BaseApiResource(this.repository, this.cache);
+}
+
+class PubApiResource extends BaseApiResource {
   final PackagesResource _packagesResource;
 
-  PubApiResource(this.repository, this._packagesResource, {this.cache});
+  PubApiResource(PackageRepository repository, this._packagesResource,
+      {PackageCache cache})
+      : super(repository, cache);
 
   @AddAll(path: 'api/packages')
   PackagesResource packages() => _packagesResource;
@@ -161,12 +168,12 @@ class PubApiResource {
 }
 
 @RestResource('package')
-class PackagesResource {
-  final PackageRepository repository;
-  final PackageCache cache;
+class PackagesResource extends BaseApiResource {
   final VersionsResource _versionsResource;
 
-  PackagesResource(this.repository, this._versionsResource, {this.cache});
+  PackagesResource(PackageRepository repository, this._versionsResource,
+      {PackageCache cache})
+      : super(repository, cache);
 
   // forwards to the versions search
   Future<Response> search(String package, Request request) =>
@@ -216,12 +223,11 @@ class PackagesResource {
 }
 
 @RestResource('version')
-class VersionsResource {
-  final PackageRepository repository;
-  final PackageCache cache;
+class VersionsResource extends BaseApiResource {
   static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
 
-  VersionsResource(this.repository, {this.cache});
+  VersionsResource(PackageRepository repository, {PackageCache cache})
+      : super(repository, cache);
 
   Future<shelf.Response> search(String package, Request request) =>
       _listVersions(request.requestedUri, package);
