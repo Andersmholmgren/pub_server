@@ -165,8 +165,10 @@ class PackagesResource extends _BaseApiResource {
   static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
 
   final VersionsResource _versionsResource;
+  final UpLoadersResource _uploadersResource;
 
   PackagesResource(PackageRepository repository, this._versionsResource,
+      this._uploadersResource,
       {PackageCache cache})
       : super(repository, cache);
 
@@ -214,31 +216,8 @@ class PackagesResource extends _BaseApiResource {
   @AddAll(path: 'versions')
   VersionsResource versions() => _versionsResource;
 
-  @Post('{package}/uploaders')
-  Future<Response> addUpLoaders(
-      String package, @RequestBody(format: ContentType.FORM) Map body) {
-    if (!repository.supportsUploaders) {
-      return new Future.value(new shelf.Response.notFound(null));
-    }
-
-    return _addUploader(package, body['email']);
-  }
-
-  @Delete('{package}/uploaders/{userEmail}')
-  Future<Response> removeUploader(String package, String userEmail) async {
-    if (!repository.supportsUploaders) {
-      return new Future.value(new shelf.Response.notFound(null));
-    }
-
-    try {
-      await repository.removeUploader(package, userEmail);
-      return _successfullRequest('Successfully removed uploader from package.');
-    } on LastUploaderRemoveException {
-      return _badRequest('Cannot remove last uploader of a package.');
-    } on UnauthorizedAccessException {
-      return _unauthorizedRequest();
-    }
-  }
+  @AddAll(path: 'uploaders')
+  UpLoadersResource upLoaders() => _uploadersResource;
 
   Future<Map> _startUploadAsync(Uri uri) async {
     final AsyncUploadInfo info =
@@ -332,19 +311,6 @@ class PackagesResource extends _BaseApiResource {
       'success': {'message': 'Successfully uploaded package.'}
     });
   }
-
-  Future<shelf.Response> _addUploader(String package, String user) async {
-    try {
-      await repository.addUploader(package, user);
-      return _successfullRequest('Successfully added uploader to package.');
-    } on UploaderAlreadyExistsException {
-      return _badRequest('Cannot add an already-existent uploader to package.');
-    } on UnauthorizedAccessException {
-      return _unauthorizedRequest();
-    }
-
-    return _badRequest('Invalid request');
-  }
 }
 
 @RestResource('version')
@@ -426,6 +392,50 @@ class VersionsResource extends _BaseApiResource {
         'version': version.versionString,
       });
     });
+  }
+}
+
+@RestResource('userEmail')
+class UpLoadersResource extends _BaseApiResource {
+  UpLoadersResource(PackageRepository repository, {PackageCache cache})
+      : super(repository, cache);
+
+  Future<Response> create(
+      String package, @RequestBody(format: ContentType.FORM) Map body) {
+    if (!repository.supportsUploaders) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    return _addUploader(package, body['email']);
+  }
+
+//  @Delete('{userEmail}')
+  Future<Response> delete(String package, String userEmail) async {
+    if (!repository.supportsUploaders) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    try {
+      await repository.removeUploader(package, userEmail);
+      return _successfullRequest('Successfully removed uploader from package.');
+    } on LastUploaderRemoveException {
+      return _badRequest('Cannot remove last uploader of a package.');
+    } on UnauthorizedAccessException {
+      return _unauthorizedRequest();
+    }
+  }
+
+  Future<shelf.Response> _addUploader(String package, String user) async {
+    try {
+      await repository.addUploader(package, user);
+      return _successfullRequest('Successfully added uploader to package.');
+    } on UploaderAlreadyExistsException {
+      return _badRequest('Cannot add an already-existent uploader to package.');
+    } on UnauthorizedAccessException {
+      return _unauthorizedRequest();
+    }
+
+    return _badRequest('Invalid request');
   }
 }
 
@@ -535,11 +545,15 @@ class _PoorMansResourceDI {
   PubApiResource createPubApiResource() =>
       new PubApiResource(repository, createPackagesResource(), cache: cache);
 
-  PackagesResource createPackagesResource() =>
-      new PackagesResource(repository, createVersionsResource(), cache: cache);
+  PackagesResource createPackagesResource() => new PackagesResource(
+      repository, createVersionsResource(), createUpLoadersResource(),
+      cache: cache);
 
   VersionsResource createVersionsResource() =>
       new VersionsResource(repository, cache: cache);
+
+  UpLoadersResource createUpLoadersResource() =>
+      new UpLoadersResource(repository, cache: cache);
 }
 
 @deprecated // just here for test compatibility
