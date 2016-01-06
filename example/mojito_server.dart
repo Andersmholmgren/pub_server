@@ -34,26 +34,24 @@ main(List<String> args) {
   runPubServer(directory, host, port);
 }
 
-runPubServer(String baseDir, String host, int port) {
+runPubServer(String baseDir, String host, int port) async {
   var client = new http.Client();
 
   var local = new FileRepository(baseDir);
   var remote = new HttpProxyRepository(client, PubDartLangOrg);
   var cow = new CopyAndWriteRepository(local, remote);
 
-//  var server = new ShelfPubServer(cow);
-//  print('Listening on http://$host:$port\n'
-//      '\n'
-//      'To make the pub client use this repository configure your shell via:\n'
-//      '\n'
-//      '    \$ export PUB_HOSTED_URL=http://$host:$port\n'
-//      '\n');
-//  return shelf_io.serve(server.requestHandler, host, port);
+  print('Listening on http://$host:$port\n'
+      '\n'
+      'To make the pub client use this repository configure your shell via:\n'
+      '\n'
+      '    \$ export PUB_HOSTED_URL=http://$host:$port\n'
+      '\n');
   final app = init();
 
   app.router.addAll(createPubApiResource(cow));
 
-  app.start();
+  app.start(port: port, address: (await InternetAddress.lookup(host)).first);
 }
 
 ArgParser argsParser() {
