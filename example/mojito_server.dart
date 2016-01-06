@@ -5,16 +5,14 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:logging/logging.dart';
-import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:http/http.dart' as http;
-import 'package:pub_server/shelf_pubserver.dart';
+import 'package:logging/logging.dart';
 import 'package:mojito/mojito.dart';
+import 'package:pub_server/mojito_pubserver.dart';
 
+import 'src/examples/cow_repository.dart';
 import 'src/examples/file_repository.dart';
 import 'src/examples/http_proxy_repository.dart';
-import 'src/examples/cow_repository.dart';
-import 'package:pub_server/mojito_pubserver.dart';
 
 final Uri PubDartLangOrg = Uri.parse('https://pub.dartlang.org');
 

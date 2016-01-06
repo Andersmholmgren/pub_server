@@ -510,3 +510,16 @@ Uri _finishUploadSimpleUrl(Uri url, {String error}) {
   var postfix = error == null ? '' : '?error=${Uri.encodeComponent(error)}';
   return url.resolve('/api/packages/versions/newUploadFinish$postfix');
 }
+
+class ShelfPubServer {
+  final PackageRepository repository;
+  final PackageCache cache;
+
+  ShelfPubServer(this.repository, {this.cache});
+
+  Future<shelf.Response> requestHandler(shelf.Request request) {
+    final r = router()..addAll(new PubApiResource(repository, cache: cache));
+
+    return r.handler(request);
+  }
+}
