@@ -2,7 +2,7 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library pub_server.shelf_pubserver;
+library pub_server.mojito_pubserver;
 
 import 'dart:async';
 import 'dart:convert';
@@ -17,7 +17,7 @@ import 'package:yaml/yaml.dart';
 
 import 'repository.dart';
 
-final Logger _logger = new Logger('pubserver.shelf_pubserver');
+final Logger _logger = new Logger('pubserver.mojito_pubserver');
 
 // TODO: Error handling from [PackageRepo] class.
 // Distinguish between:
@@ -162,6 +162,8 @@ class PubApiResource extends _BaseApiResource {
 
 @RestResource('package')
 class PackagesResource extends _BaseApiResource {
+  static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
+
   final VersionsResource _versionsResource;
 
   PackagesResource(PackageRepository repository, this._versionsResource,
@@ -175,17 +177,40 @@ class PackagesResource extends _BaseApiResource {
 
   // forwards to the versions new. Not pretty but URL scheme a bit odd
   @Get('versions/new')
-  Future<Map> uploadVersion(Request request) =>
-      _versionsResource.upload(request);
+  Future<Map> upload(Request request) {
+    if (!repository.supportsUpload) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    if (repository.supportsAsyncUpload) {
+      return _startUploadAsync(request.requestedUri);
+    } else {
+      return _startUploadSimple(request.requestedUri);
+    }
+  }
+
+  @Get('versions/newUploadFinish')
+  Future<Response> newUploadFinish(Request request) {
+    if (!repository.supportsUpload) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
+
+    if (repository.supportsAsyncUpload) {
+      return _finishUploadAsync(request.requestedUri);
+    } else {
+      return _finishUploadSimple(request.requestedUri);
+    }
+  }
 
   @Post('versions/newUpload')
-  Future<Response> newVersionUpload(Request request) =>
-      _versionsResource.newUpload(request);
+  Future<Response> newUpload(Request request) {
+    if (!repository.supportsUpload) {
+      return new Future.value(new shelf.Response.notFound(null));
+    }
 
-  // forwards to the versions new. Not pretty but URL scheme a bit odd
-  @Get('versions/newUploadFinish')
-  Future<Response> newUploadVersionFinish(Request request) =>
-      _versionsResource.newUploadFinish(request);
+    return _uploadSimple(
+        request.requestedUri, request.headers['content-type'], request.read());
+  }
 
   @AddAll(path: 'versions')
   VersionsResource versions() => _versionsResource;
@@ -214,139 +239,6 @@ class PackagesResource extends _BaseApiResource {
     } on UnauthorizedAccessException {
       return _unauthorizedRequest();
     }
-  }
-
-  Future<shelf.Response> _addUploader(String package, String user) async {
-    try {
-      await repository.addUploader(package, user);
-      return _successfullRequest('Successfully added uploader to package.');
-    } on UploaderAlreadyExistsException {
-      return _badRequest('Cannot add an already-existent uploader to package.');
-    } on UnauthorizedAccessException {
-      return _unauthorizedRequest();
-    }
-
-    return _badRequest('Invalid request');
-  }
-}
-
-@RestResource('version')
-class VersionsResource extends _BaseApiResource {
-  static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
-
-  VersionsResource(PackageRepository repository, {PackageCache cache})
-      : super(repository, cache);
-
-  Future<shelf.Response> search(String package, Request request) =>
-      _listVersions(request.requestedUri, package);
-
-  @Get('new')
-  Future<Map> upload(Request request) {
-    if (!repository.supportsUpload) {
-      return new Future.value(new shelf.Response.notFound(null));
-    }
-
-    if (repository.supportsAsyncUpload) {
-      return _startUploadAsync(request.requestedUri);
-    } else {
-      return _startUploadSimple(request.requestedUri);
-    }
-  }
-
-  @Get('newUploadFinish')
-  Future<Response> newUploadFinish(Request request) {
-    if (!repository.supportsUpload) {
-      return new Future.value(new shelf.Response.notFound(null));
-    }
-
-    if (repository.supportsAsyncUpload) {
-      return _finishUploadAsync(request.requestedUri);
-    } else {
-      return _finishUploadSimple(request.requestedUri);
-    }
-  }
-
-  @Post('newUpload')
-  Future<Response> newUpload(Request request) {
-    if (!repository.supportsUpload) {
-      return new Future.value(new shelf.Response.notFound(null));
-    }
-
-    return _uploadSimple(
-        request.requestedUri, request.headers['content-type'], request.read());
-  }
-
-  Future<Response> find(String package, String version, Request request) {
-    if (!isSemanticVersion(version)) return _invalidVersion(version);
-    return _showVersion(request.requestedUri, package, version);
-  }
-
-  Future<shelf.Response> _listVersions(Uri uri, String package) async {
-    if (cache != null) {
-      var binaryJson = await cache.getPackageData(package);
-      if (binaryJson != null) {
-        return _binaryJsonResponse(binaryJson);
-      }
-    }
-
-    return repository
-        .versions(package)
-        .toList()
-        .then((List<PackageVersion> packageVersions) async {
-      if (packageVersions.length == 0) {
-        return new shelf.Response.notFound(null);
-      }
-
-      packageVersions.sort((a, b) => a.version.compareTo(b.version));
-
-      // TODO: Add legacy entries (if necessary), such as version_url.
-      Map packageVersion2Json(PackageVersion version) {
-        return {
-          'archive_url': '${_downloadUrl(
-            uri, version.packageName, version.versionString)}',
-          'pubspec': loadYaml(version.pubspecYaml),
-          'version': version.versionString,
-        };
-      }
-
-      var latestVersion = packageVersions.last;
-      for (int i = packageVersions.length - 1; i >= 0; i--) {
-        if (!packageVersions[i].version.isPreRelease) {
-          latestVersion = packageVersions[i];
-          break;
-        }
-      }
-
-      // TODO: The 'latest' is something we should get rid of, since it's
-      // duplicated in 'versions'.
-      var binaryJson = JSON.encoder.fuse(UTF8.encoder).convert({
-        'name': package,
-        'latest': packageVersion2Json(latestVersion),
-        'versions': packageVersions.map(packageVersion2Json).toList(),
-      });
-      if (cache != null) {
-        await cache.setPackageData(package, binaryJson);
-      }
-      return _binaryJsonResponse(binaryJson);
-    });
-  }
-
-  Future<shelf.Response> _showVersion(Uri uri, String package, String version) {
-    return repository
-        .lookupVersion(package, version)
-        .then((PackageVersion version) {
-      if (version == null) {
-        return new shelf.Response.notFound('');
-      }
-
-      // TODO: Add legacy entries (if necessary), such as version_url.
-      return _jsonResponse({
-        'archive_url': '${_downloadUrl(
-          uri, version.packageName, version.versionString)}',
-        'pubspec': loadYaml(version.pubspecYaml),
-        'version': version.versionString,
-      });
-    });
   }
 
   Future<Map> _startUploadAsync(Uri uri) async {
@@ -439,6 +331,101 @@ class VersionsResource extends _BaseApiResource {
     }
     return _jsonResponse({
       'success': {'message': 'Successfully uploaded package.'}
+    });
+  }
+
+  Future<shelf.Response> _addUploader(String package, String user) async {
+    try {
+      await repository.addUploader(package, user);
+      return _successfullRequest('Successfully added uploader to package.');
+    } on UploaderAlreadyExistsException {
+      return _badRequest('Cannot add an already-existent uploader to package.');
+    } on UnauthorizedAccessException {
+      return _unauthorizedRequest();
+    }
+
+    return _badRequest('Invalid request');
+  }
+}
+
+@RestResource('version')
+class VersionsResource extends _BaseApiResource {
+  VersionsResource(PackageRepository repository, {PackageCache cache})
+      : super(repository, cache);
+
+  Future<shelf.Response> search(String package, Request request) =>
+      _listVersions(request.requestedUri, package);
+
+  Future<Response> find(String package, String version, Request request) {
+    if (!isSemanticVersion(version)) return _invalidVersion(version);
+    return _showVersion(request.requestedUri, package, version);
+  }
+
+  Future<shelf.Response> _listVersions(Uri uri, String package) async {
+    if (cache != null) {
+      var binaryJson = await cache.getPackageData(package);
+      if (binaryJson != null) {
+        return _binaryJsonResponse(binaryJson);
+      }
+    }
+
+    return repository
+        .versions(package)
+        .toList()
+        .then((List<PackageVersion> packageVersions) async {
+      if (packageVersions.length == 0) {
+        return new shelf.Response.notFound(null);
+      }
+
+      packageVersions.sort((a, b) => a.version.compareTo(b.version));
+
+      // TODO: Add legacy entries (if necessary), such as version_url.
+      Map packageVersion2Json(PackageVersion version) {
+        return {
+          'archive_url': '${_downloadUrl(
+            uri, version.packageName, version.versionString)}',
+          'pubspec': loadYaml(version.pubspecYaml),
+          'version': version.versionString,
+        };
+      }
+
+      var latestVersion = packageVersions.last;
+      for (int i = packageVersions.length - 1; i >= 0; i--) {
+        if (!packageVersions[i].version.isPreRelease) {
+          latestVersion = packageVersions[i];
+          break;
+        }
+      }
+
+      // TODO: The 'latest' is something we should get rid of, since it's
+      // duplicated in 'versions'.
+      var binaryJson = JSON.encoder.fuse(UTF8.encoder).convert({
+        'name': package,
+        'latest': packageVersion2Json(latestVersion),
+        'versions': packageVersions.map(packageVersion2Json).toList(),
+      });
+      if (cache != null) {
+        await cache.setPackageData(package, binaryJson);
+      }
+      return _binaryJsonResponse(binaryJson);
+    });
+  }
+
+  Future<shelf.Response> _showVersion(Uri uri, String package, String version) {
+    return repository
+        .lookupVersion(package, version)
+        .then((PackageVersion version) {
+      if (version == null) {
+        return new shelf.Response.notFound('');
+      }
+
+      // TODO: Add legacy entries (if necessary), such as version_url.
+      return _jsonResponse({
+        'archive_url': '${_downloadUrl(
+          uri, version.packageName, version.versionString)}',
+        'pubspec': loadYaml(version.pubspecYaml),
+        'version': version.versionString,
+      });
     });
   }
 }

@@ -30,7 +30,6 @@ main(List<String> args) {
     exit(1);
   }
 
-//  setupLogger();
   runPubServer(directory, host, port);
 }
 
@@ -64,12 +63,4 @@ ArgParser argsParser() {
 
   parser.addOption('port', abbr: 'p', defaultsTo: '8080');
   return parser;
-}
-
-void setupLogger() {
-  Logger.root.onRecord.listen((LogRecord record) {
-    var head = '${record.time} ${record.level} ${record.loggerName}';
-    var tail = record.stackTrace != null ? '\n${record.stackTrace}' : '';
-    print('$head ${record.message} $tail');
-  });
 }
