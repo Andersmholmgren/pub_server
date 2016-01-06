@@ -165,10 +165,10 @@ class PackagesResource extends _BaseApiResource {
   static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
 
   final VersionsResource _versionsResource;
-  final UpLoadersResource _uploadersResource;
+  final UpLoadersResource _upLoadersResource;
 
   PackagesResource(PackageRepository repository, this._versionsResource,
-      this._uploadersResource,
+      this._upLoadersResource,
       {PackageCache cache})
       : super(repository, cache);
 
@@ -217,7 +217,7 @@ class PackagesResource extends _BaseApiResource {
   VersionsResource versions() => _versionsResource;
 
   @AddAll(path: 'uploaders')
-  UpLoadersResource upLoaders() => _uploadersResource;
+  UpLoadersResource upLoaders() => _upLoadersResource;
 
   Future<Map> _startUploadAsync(Uri uri) async {
     final AsyncUploadInfo info =
