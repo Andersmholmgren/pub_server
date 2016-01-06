@@ -200,7 +200,7 @@ class PackagesResource extends _BaseApiResource {
     return _addUploader(package, body['email']);
   }
 
-  @Delete('uploaders/{userEmail}')
+  @Delete('{package}/uploaders/{userEmail}')
   removeUploader(String package, String userEmail) async {
     if (!repository.supportsUploaders) {
       return new Future.value(new shelf.Response.notFound(null));
