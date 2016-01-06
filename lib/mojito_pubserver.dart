@@ -175,7 +175,6 @@ class PackagesResource extends _BaseApiResource {
   Future<Response> searchVersions(String package, Request request) =>
       _versionsResource.search(package, request);
 
-  // forwards to the versions new. Not pretty but URL scheme a bit odd
   @Get('versions/new')
   Future<Map> upload(Request request) {
     if (!repository.supportsUpload) {
