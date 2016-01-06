@@ -221,7 +221,7 @@ class VersionsResource {
       _listVersions(request.requestedUri, package);
 
   @Get('new')
-  Future<Response> upload(Request request) {
+  Future<Map> upload(Request request) {
     if (!repository.supportsUpload) {
       return new Future.value(new shelf.Response.notFound(null));
     }
@@ -327,16 +327,15 @@ class VersionsResource {
     });
   }
 
-  Future<shelf.Response> _startUploadAsync(Uri uri) {
-    return repository
-        .startAsyncUpload(_finishUploadAsyncUrl(uri))
-        .then((AsyncUploadInfo info) {
-      return _jsonResponse({'url': '${info.uri}', 'fields': info.fields,});
-    });
+  Future<Map> _startUploadAsync(Uri uri) async {
+    final AsyncUploadInfo info =
+        await repository.startAsyncUpload(_finishUploadAsyncUrl(uri));
+    return {'url': '${info.uri}', 'fields': info.fields,};
   }
 
-  Future<shelf.Response> _finishUploadAsync(Uri uri) {
-    return repository.finishAsyncUpload(uri).then((PackageVersion vers) async {
+  Future<shelf.Response> _finishUploadAsync(Uri uri) async {
+    try {
+      final PackageVersion vers = await repository.finishAsyncUpload(uri);
       if (cache != null) {
         _logger.info('Invalidating cache for package ${vers.packageName}.');
         await cache.invalidatePackageData(vers.packageName);
@@ -344,19 +343,19 @@ class VersionsResource {
       return _jsonResponse({
         'success': {'message': 'Successfully uploaded package.',},
       });
-    }).catchError((error, stack) {
+    } catch (error, stack) {
       _logger.warning('An error occured while finishing upload', error, stack);
       return _jsonResponse({
         'error': {'message': '$error.',},
       }, status: 400);
-    });
+    }
   }
 
 // Upload custom handlers.
 
-  Future<shelf.Response> _startUploadSimple(Uri url) {
+  Future<Map> _startUploadSimple(Uri url) async {
     _logger.info('Start simple upload.');
-    return _jsonResponse({'url': '${_uploadSimpleUrl(url)}', 'fields': {},});
+    return {'url': '${_uploadSimpleUrl(url)}', 'fields': {},};
   }
 
   Future<shelf.Response> _uploadSimple(
