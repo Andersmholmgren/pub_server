@@ -133,11 +133,15 @@ final Logger _logger = new Logger('pubserver.shelf_pubserver');
 class PubApiResource {
   final PackageRepository repository;
   final PackageCache cache;
+  final PackagesResource _packagesResource;
 
-  PubApiResource(this.repository, {this.cache});
+  PubApiResource(PackageRepository repository, {PackageCache cache})
+      : this.repository = repository,
+        this.cache = cache,
+        this._packagesResource = new PackagesResource(repository, cache: cache);
 
   @AddAll(path: 'api/packages')
-  PackagesResource packages() => new PackagesResource(repository, cache: cache);
+  PackagesResource packages() => _packagesResource;
 
   @Get('packages/{package}/versions/{version}.tar.gz')
   Future<shelf.Response> download(
@@ -163,8 +167,12 @@ class PubApiResource {
 class PackagesResource {
   final PackageRepository repository;
   final PackageCache cache;
+  final VersionsResource _versionsResource;
 
-  PackagesResource(this.repository, {this.cache});
+  PackagesResource(PackageRepository repository, {PackageCache cache})
+      : this.repository = repository,
+        this.cache = cache,
+        this._versionsResource = new VersionsResource(repository, cache: cache);
 
   @AddAll(path: 'versions')
   VersionsResource versions() => new VersionsResource(repository, cache: cache);
