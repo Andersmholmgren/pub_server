@@ -130,14 +130,7 @@ final Logger _logger = new Logger('pubserver.shelf_pubserver');
 /// this HTTP endpoint.
 ///
 ///
-abstract class BaseApiResource {
-  final PackageRepository repository;
-  final PackageCache cache;
-
-  BaseApiResource(this.repository, this.cache);
-}
-
-class PubApiResource extends BaseApiResource {
+class PubApiResource extends _BaseApiResource {
   final PackagesResource _packagesResource;
 
   PubApiResource(PackageRepository repository, this._packagesResource,
@@ -168,7 +161,7 @@ class PubApiResource extends BaseApiResource {
 }
 
 @RestResource('package')
-class PackagesResource extends BaseApiResource {
+class PackagesResource extends _BaseApiResource {
   final VersionsResource _versionsResource;
 
   PackagesResource(PackageRepository repository, this._versionsResource,
@@ -223,7 +216,7 @@ class PackagesResource extends BaseApiResource {
 }
 
 @RestResource('version')
-class VersionsResource extends BaseApiResource {
+class VersionsResource extends _BaseApiResource {
   static final RegExp _boundaryRegExp = new RegExp(r'^.*boundary="([^"]+)"$');
 
   VersionsResource(PackageRepository repository, {PackageCache cache})
@@ -440,6 +433,13 @@ bool isSemanticVersion(String version) {
   } catch (_) {
     return false;
   }
+}
+
+abstract class _BaseApiResource {
+  final PackageRepository repository;
+  final PackageCache cache;
+
+  _BaseApiResource(this.repository, this.cache);
 }
 
 /// A cache for storing metadata for packages.
