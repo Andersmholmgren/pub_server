@@ -173,6 +173,16 @@ class PackagesResource extends _BaseApiResource {
   Future<Response> searchVersions(String package, Request request) =>
       _versionsResource.search(package, request);
 
+  // forwards to the versions new. Not pretty but URL scheme a bit odd
+  @Get('versions/new')
+  Future<Map> uploadVersion(Request request) =>
+      _versionsResource.upload(request);
+
+  // forwards to the versions new. Not pretty but URL scheme a bit odd
+  @Get('versions/newUploadFinish')
+  Future<Response> newUploadVersionFinish(Request request) =>
+      _versionsResource.newUploadFinish(request);
+
   @AddAll(path: 'versions')
   VersionsResource versions() => _versionsResource;
 
