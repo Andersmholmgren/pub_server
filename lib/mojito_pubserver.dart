@@ -276,8 +276,10 @@ class VersionsResource extends _BaseApiResource {
         request.requestedUri, request.headers['content-type'], request.read());
   }
 
-  Future find(String package, String version, Request request) =>
-      _showVersion(request.requestedUri, package, version);
+  Future<Response> find(String package, String version, Request request) {
+    if (!isSemanticVersion(version)) return _invalidVersion(version);
+    return _showVersion(request.requestedUri, package, version);
+  }
 
   Future<shelf.Response> _listVersions(Uri uri, String package) async {
     if (cache != null) {
