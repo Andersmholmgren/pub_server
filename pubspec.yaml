@@ -10,7 +10,9 @@ dependencies:
   shelf: '>=0.5.6 <0.7.0'
   yaml: '>=2.1.2 <3.0.0'
   mojito: 
-    path: /Users/blah/dart/myclones/pub_server_container_root/shelfish_root/mojito
+    git: 
+      ref: ea7f5164c07d16e558bdb6e93763b4331e9f6361
+      url: git@bitbucket.org:andersmholmgren/mojito.git
 dependency_overrides: 
 dev_dependencies: 
   archive: '>=1.0.0 <2.0.0'
